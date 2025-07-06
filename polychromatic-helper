@@ -234,7 +234,7 @@ class PolychromaticHelper(PolychromaticBase):
         playback = EffectPlayback(device, device.matrix, effect_data)
 
         if effect_type == effects.TYPE_LAYERED:
-            raise NotImplementedError()
+            playback.play_layered()
         elif effect_type == effects.TYPE_SCRIPTED:
             raise NotImplementedError()
         elif effect_type == effects.TYPE_SEQUENCE:
@@ -293,6 +293,38 @@ class EffectPlayback(PolychromaticBase):
                     current = -1
                 else:
                     sys.exit(0)
+
+    def play_layered(self):
+        """Render a static layered effect."""
+        layers = self.data.get("layers", [])
+        fps = self.data.get("fps", 15)
+        looped = self.data.get("loop", True)
+
+        while True:
+            self.matrix.clear()
+            for layer in layers:
+                ltype = layer.get("type")
+                positions = layer.get("positions", [])
+                props = layer.get("properties", {})
+
+                if ltype == effects.LAYER_STATIC:
+                    colour = props.get("colour", "#000000")
+                    for pos in positions:
+                        try:
+                            x, y = pos
+                        except Exception:
+                            continue
+                        try:
+                            rgb = common.hex_to_rgb(colour)
+                            self.matrix.set(int(x), int(y), rgb[0], rgb[1], rgb[2])
+                        except Exception:
+                            continue
+
+            self.matrix.draw()
+            time.sleep(1 / fps)
+
+            if not looped:
+                break
 
 
 if __name__ == "__main__":

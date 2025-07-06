@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (QCheckBox, QColorDialog, QDockWidget, QLabel,
                              QLineEdit, QMainWindow, QMenu, QMenuBar,
                              QMessageBox, QPushButton, QSpinBox, QStatusBar,
                              QTableWidget, QToolBar, QToolButton, QTreeWidget,
-                             QWidget)
+                             QTreeWidgetItem, QWidget)
 
 from .. import common, effects
 from .. import preferences as pref
@@ -258,6 +258,7 @@ class VisualEffectEditor(shared.TabData):
         self.btn_layer_duplicate.clicked.connect(self.duplicate_layer)
         self.btn_layer_move_up.clicked.connect(self.raise_layer)
         self.btn_layer_move_down.clicked.connect(self.lower_layer)
+        self.layer_tree.itemSelectionChanged.connect(self.open_layer)
 
         # -- Edit (Sequence)
         self.action_new_frame.triggered.connect(self.new_frame)
@@ -1175,6 +1176,16 @@ class VisualEffectEditor(shared.TabData):
         """
         Clears and populates layers on the dock controls.
         """
+        tree = self.layer_tree
+        tree.clear()
+        for index, layer in enumerate(self.data.get("layers", [])):
+            name = layer.get("name", f"Layer {index+1}")
+            ltype = self.layer_labels.get(layer.get("type"), str(layer.get("type")))
+            item = QTreeWidgetItem([name, ltype])
+            tree.addTopLevelItem(item)
+
+        if tree.topLevelItemCount() > 0:
+            tree.setCurrentItem(tree.topLevelItem(self.current_layer))
 
     def open_layer(self):
         """
@@ -1183,44 +1194,159 @@ class VisualEffectEditor(shared.TabData):
         This will redraw the colours in the visual editor and physical device
         (if preview is enabled) based on the currently selected layer.
         """
+        fx = self.matrix
+        self.device_renderer.clear()
+
+        if fx:
+            fx.clear()
+
+        if not self.layer_tree.selectedItems():
+            if self.layer_tree.topLevelItemCount() == 0:
+                return
+            self.layer_tree.setCurrentItem(self.layer_tree.topLevelItem(self.current_layer))
+
+        item = self.layer_tree.selectedItems()[0]
+        index = self.layer_tree.indexOfTopLevelItem(item)
+        self.current_layer = index
+        layer = self.data["layers"][index]
+
+        positions = layer.get("positions", [])
+        colour = layer.get("properties", {}).get("colour", "#000000")
+
+        for pos in positions:
+            try:
+                x, y = pos
+            except Exception:
+                continue
+
+            self.device_renderer.set_pos(x, y, colour)
+            if fx:
+                try:
+                    rgb = common.hex_to_rgb(colour)
+                    fx.set(int(x), int(y), rgb[0], rgb[1], rgb[2])
+                except Exception:
+                    continue
+
+        if fx:
+            fx.draw()
+
+        layout = self.dock_properties.widget().layout()
+        shared.clear_layout(layout)
+        layout.addRow(QLabel(self._("Type")), QLabel(self.layer_labels.get(layer.get("type"), "")))
 
     def new_layer(self):
         """
         Create a new layer using default values and loads it.
         """
+        self.set_modified(True)
+        new_layer = {
+            "name": self._("Layer {0}").format(len(self.data["layers"]) + 1),
+            "type": effects.LAYER_STATIC,
+            "positions": [],
+            "properties": {"colour": self.current_colour}
+        }
+        self.data["layers"].append(new_layer)
+        self.load_layers()
+        self.layer_tree.setCurrentItem(self.layer_tree.topLevelItem(len(self.data["layers"]) - 1))
+        self.open_layer()
 
     def delete_layer(self):
         """
         Prompts for confirmation before deleting a layer.
         """
+        if len(self.data.get("layers", [])) <= 1:
+            return
+
+        index = self.current_layer
+        del self.data["layers"][index]
+        if index >= len(self.data["layers"]):
+            index = len(self.data["layers"]) - 1
+        self.current_layer = max(index, 0)
+        self.load_layers()
+        if self.layer_tree.topLevelItemCount() > 0:
+            self.layer_tree.setCurrentItem(self.layer_tree.topLevelItem(self.current_layer))
+        self.open_layer()
 
     def duplicate_layer(self):
         """
         Creates a new layer inheriting the data for the currently selected one
         and loads it.
         """
+        self.set_modified(True)
+        new_layer = copy.deepcopy(self.data["layers"][self.current_layer])
+        new_layer["name"] = new_layer.get("name", "Layer") + " Copy"
+        self.data["layers"].insert(self.current_layer + 1, new_layer)
+        self.load_layers()
+        self.layer_tree.setCurrentItem(self.layer_tree.topLevelItem(self.current_layer + 1))
+        self.open_layer()
 
     def raise_layer(self):
         """
         Moves the layer up by one and refreshes the visual editor.
         """
+        if self.current_layer <= 0:
+            return
+        self.set_modified(True)
+        index = self.current_layer
+        layers = self.data["layers"]
+        layers[index - 1], layers[index] = layers[index], layers[index - 1]
+        self.current_layer = index - 1
+        self.load_layers()
+        self.layer_tree.setCurrentItem(self.layer_tree.topLevelItem(self.current_layer))
+        self.open_layer()
 
     def lower_layer(self):
         """
         Moves the layer down by one and refreshes the visual editor.
         """
+        if self.current_layer >= len(self.data["layers"]) - 1:
+            return
+        self.set_modified(True)
+        index = self.current_layer
+        layers = self.data["layers"]
+        layers[index], layers[index + 1] = layers[index + 1], layers[index]
+        self.current_layer = index + 1
+        self.load_layers()
+        self.layer_tree.setCurrentItem(self.layer_tree.topLevelItem(self.current_layer))
+        self.open_layer()
 
     def assign_key_to_layer(self, x, y):
         """
         User clicks on a key/LED in the visual editor. Add this to the layer
         and update the device preview.
         """
+        layer = self.data["layers"][self.current_layer]
+        if [x, y] not in layer.get("positions", []):
+            layer["positions"].append([x, y])
+            self.set_modified(True)
+
+        colour = layer.get("properties", {}).get("colour", self.current_colour)
+        self.device_renderer.set_pos(x, y, colour)
+        if self.matrix:
+            try:
+                rgb = common.hex_to_rgb(colour)
+                self.matrix.set(int(x), int(y), rgb[0], rgb[1], rgb[2])
+                self.matrix.draw()
+            except Exception:
+                pass
 
     def unassign_key_to_layer(self, x, y):
         """
         User clicks on a key/LED in the visual editor. Remove this from the
         layer and update the device preview.
         """
+        layer = self.data["layers"][self.current_layer]
+        if [x, y] in layer.get("positions", []):
+            layer["positions"].remove([x, y])
+            self.set_modified(True)
+
+        self.device_renderer.set_pos(x, y, "#000000")
+        if self.matrix:
+            try:
+                self.matrix.set(int(x), int(y), 0, 0, 0)
+                self.matrix.draw()
+            except Exception:
+                pass
 
     # ----------------------------
     # Specific to Sequence Effects
