@@ -147,8 +147,8 @@ class EffectsTab(shared.CommonFileTab):
         btn_scripted.clicked.connect(lambda: self.new_file_stage_2(dialog, effects.TYPE_SCRIPTED))
         btn_sequence.clicked.connect(lambda: self.new_file_stage_2(dialog, effects.TYPE_SEQUENCE))
 
-        # FIXME: Not yet implemented editors
-        btn_layered.setEnabled(False)
+        # FIXME: Scripted editor is not yet implemented
+        # leave the "Layered" option enabled so it can be selected
         btn_scripted.setEnabled(False)
 
         dialog.open()
