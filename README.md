@@ -30,6 +30,8 @@ to match the application or game that's currently playing.
 [View Screenshots](https://polychromatic.app/screenshots/) |
 [View FAQs and Documentation](https://docs.polychromatic.app/)
 
+This fork adds the ability to stack multiple software layers so complex lighting effects can be created entirely in software.
+
 
 ## Device Support
 
