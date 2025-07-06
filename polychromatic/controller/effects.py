@@ -106,11 +106,12 @@ class EffectsTab(shared.CommonFileTab):
         if not self._check_for_device_new_file():
             return
 
-        dialog = shared.get_ui_widget(self.appdata, "new-effect", QDialog)
+        # Keep a reference so the dialog isn't destroyed before the user makes
+        # a choice.
+        self.new_effect_dialog = shared.get_ui_widget(self.appdata, "new-effect", QDialog)
+        dialog = self.new_effect_dialog
 
-        # TODO: Not all effect types are implemented, create sequence one
-        self.new_file_stage_2(dialog, effects.TYPE_SEQUENCE)
-        return
+        # Present the dialog so users can select the effect type
 
         btn_layered = dialog.findChild(QToolButton, "NewLayered")
         btn_scripted = dialog.findChild(QToolButton, "NewScripted")
@@ -147,8 +148,8 @@ class EffectsTab(shared.CommonFileTab):
         btn_scripted.clicked.connect(lambda: self.new_file_stage_2(dialog, effects.TYPE_SCRIPTED))
         btn_sequence.clicked.connect(lambda: self.new_file_stage_2(dialog, effects.TYPE_SEQUENCE))
 
-        # FIXME: Not yet implemented editors
-        btn_layered.setEnabled(False)
+        # FIXME: Scripted editor is not yet implemented
+        # leave the "Layered" option enabled so it can be selected
         btn_scripted.setEnabled(False)
 
         dialog.open()
@@ -163,6 +164,9 @@ class EffectsTab(shared.CommonFileTab):
             effect_type     effects.TYPE_* reference
         """
         old_dialog.accept()
+        # Clear reference as the dialog is no longer visible
+        if hasattr(self, "new_effect_dialog"):
+            self.new_effect_dialog = None
         data = self.fileman.init_data("", effect_type)
 
         # Set default icon to what the effect is
