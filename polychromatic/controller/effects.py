@@ -108,9 +108,7 @@ class EffectsTab(shared.CommonFileTab):
 
         dialog = shared.get_ui_widget(self.appdata, "new-effect", QDialog)
 
-        # TODO: Not all effect types are implemented, create sequence one
-        self.new_file_stage_2(dialog, effects.TYPE_SEQUENCE)
-        return
+        # Present the dialog so users can select the effect type
 
         btn_layered = dialog.findChild(QToolButton, "NewLayered")
         btn_scripted = dialog.findChild(QToolButton, "NewScripted")
